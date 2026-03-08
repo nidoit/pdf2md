@@ -24,11 +24,9 @@ check_arch_deps() {
     fi
 }
 
-# venv가 없으면 생성
-if [ ! -d "$VENV_DIR" ]; then
+# marker-pdf 설치 함수
+install_marker() {
     check_arch_deps
-    echo "가상환경 생성 중..."
-    python3 -m venv --system-site-packages "$VENV_DIR"
     echo "marker-pdf 설치 중... (시간이 걸릴 수 있습니다)"
     "$VENV_DIR/bin/pip" install --upgrade pip
     # Pillow, numpy 등은 시스템 패키지를 사용하고 소스 빌드를 하지 않음
@@ -41,6 +39,17 @@ if [ ! -d "$VENV_DIR" ]; then
     fi
     echo "설치 완료."
     echo ""
+}
+
+# venv가 없으면 생성
+if [ ! -d "$VENV_DIR" ]; then
+    echo "가상환경 생성 중..."
+    python3 -m venv --system-site-packages "$VENV_DIR"
+    install_marker
+# venv는 있지만 marker가 설치되지 않은 경우
+elif ! "$VENV_DIR/bin/python" -c "import marker" 2>/dev/null; then
+    echo "marker-pdf가 설치되어 있지 않습니다. 설치를 진행합니다."
+    install_marker
 fi
 
 # venv의 python으로 실행
