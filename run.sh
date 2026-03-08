@@ -5,13 +5,39 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 
+# 시스템 빌드 의존성 확인 (Arch Linux)
+check_arch_deps() {
+    if command -v pacman &>/dev/null; then
+        local missing=()
+        for pkg in python libjpeg-turbo libtiff openjpeg2 zlib libxcb gcc; do
+            if ! pacman -Qi "$pkg" &>/dev/null; then
+                missing+=("$pkg")
+            fi
+        done
+        if [ ${#missing[@]} -gt 0 ]; then
+            echo "필요한 시스템 패키지가 없습니다. 먼저 설치해주세요:"
+            echo ""
+            echo "  sudo pacman -S ${missing[*]}"
+            echo ""
+            exit 1
+        fi
+    fi
+}
+
 # venv가 없으면 생성
 if [ ! -d "$VENV_DIR" ]; then
+    check_arch_deps
     echo "가상환경 생성 중..."
-    python3 -m venv "$VENV_DIR"
+    python3 -m venv --system-site-packages "$VENV_DIR"
     echo "marker-pdf 설치 중... (시간이 걸릴 수 있습니다)"
     "$VENV_DIR/bin/pip" install --upgrade pip
     "$VENV_DIR/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "설치 실패. .venv 폴더를 삭제 후 다시 시도하세요:"
+        echo "  rm -rf $VENV_DIR"
+        exit 1
+    fi
     echo "설치 완료."
     echo ""
 fi
