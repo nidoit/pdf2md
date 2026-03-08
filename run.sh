@@ -9,7 +9,7 @@ VENV_DIR="$SCRIPT_DIR/.venv"
 check_arch_deps() {
     if command -v pacman &>/dev/null; then
         local missing=()
-        for pkg in python libjpeg-turbo libtiff openjpeg2 zlib libxcb gcc; do
+        for pkg in python python-pillow python-numpy; do
             if ! pacman -Qi "$pkg" &>/dev/null; then
                 missing+=("$pkg")
             fi
@@ -31,7 +31,8 @@ if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv --system-site-packages "$VENV_DIR"
     echo "marker-pdf 설치 중... (시간이 걸릴 수 있습니다)"
     "$VENV_DIR/bin/pip" install --upgrade pip
-    "$VENV_DIR/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
+    # Pillow, numpy 등은 시스템 패키지를 사용하고 소스 빌드를 하지 않음
+    "$VENV_DIR/bin/pip" install --only-binary Pillow,numpy -r "$SCRIPT_DIR/requirements.txt"
     if [ $? -ne 0 ]; then
         echo ""
         echo "설치 실패. .venv 폴더를 삭제 후 다시 시도하세요:"
