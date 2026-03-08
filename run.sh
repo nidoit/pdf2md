@@ -29,8 +29,28 @@ install_marker() {
     check_arch_deps
     echo "marker-pdf 설치 중... (시간이 걸릴 수 있습니다)"
     "$VENV_DIR/bin/pip" install --upgrade pip
-    # Pillow, numpy 등은 시스템 패키지를 사용하고 소스 빌드를 하지 않음
-    "$VENV_DIR/bin/pip" install --only-binary Pillow,numpy -r "$SCRIPT_DIR/requirements.txt"
+
+    # 먼저 일반 설치 시도
+    if "$VENV_DIR/bin/pip" install -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null; then
+        echo "설치 완료."
+        echo ""
+        return 0
+    fi
+
+    # Pillow 버전 충돌 시 uv의 --override로 우회
+    echo ""
+    echo "Pillow 버전 충돌 감지. uv를 사용하여 재시도합니다..."
+    "$VENV_DIR/bin/pip" install uv
+
+    # Pillow 상한 제거 override 파일 생성
+    local OVERRIDE_FILE="$VENV_DIR/overrides.txt"
+    echo "Pillow>=10.1.0" > "$OVERRIDE_FILE"
+
+    "$VENV_DIR/bin/uv" pip install \
+        --python "$VENV_DIR/bin/python" \
+        --override "$OVERRIDE_FILE" \
+        -r "$SCRIPT_DIR/requirements.txt"
+
     if [ $? -ne 0 ]; then
         echo ""
         echo "설치 실패. .venv 폴더를 삭제 후 다시 시도하세요:"
