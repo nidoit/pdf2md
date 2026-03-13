@@ -34,15 +34,25 @@ elif ! "$VENV_DIR/bin/python" -c "import pymupdf4llm" 2>/dev/null; then
     echo ""
 fi
 
-# Tesseract OCR 데이터 경로 자동 탐색
-if [ -z "$TESSDATA_PREFIX" ]; then
-    for tessdir in /usr/share/tesseract-ocr/5/tessdata /usr/share/tesseract-ocr/4/tessdata /usr/share/tessdata /opt/homebrew/share/tessdata; do
-        if [ -d "$tessdir" ]; then
-            export TESSDATA_PREFIX="$tessdir"
+# Tesseract OCR 데이터 경로 자동 설정
+# pymupdf 내장 Tesseract가 /usr/share/tessdata/ 를 하드코딩하므로
+# 실제 tessdata 경로가 다른 경우 심볼릭 링크를 생성
+if [ ! -d /usr/share/tessdata ] || [ ! -f /usr/share/tessdata/eng.traineddata ]; then
+    for tessdir in /usr/share/tesseract-ocr/5/tessdata /usr/share/tesseract-ocr/4/tessdata /usr/share/tesseract-ocr/3/tessdata /opt/homebrew/share/tessdata /usr/local/share/tessdata; do
+        if [ -f "$tessdir/eng.traineddata" ]; then
+            echo "Tesseract 데이터 경로 연결: $tessdir -> /usr/share/tessdata"
+            sudo ln -sf "$tessdir" /usr/share/tessdata 2>/dev/null || {
+                echo ""
+                echo "⚠ /usr/share/tessdata 심볼릭 링크 생성에 sudo 권한이 필요합니다."
+                echo "  다음 명령을 한 번 실행해주세요:"
+                echo "    sudo ln -sf $tessdir /usr/share/tessdata"
+                echo ""
+            }
             break
         fi
     done
 fi
+export TESSDATA_PREFIX="/usr/share/tessdata"
 
 # venv의 python으로 실행
 "$VENV_DIR/bin/python" "$SCRIPT_DIR/pdf2md.py" "$@"
