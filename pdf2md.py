@@ -26,19 +26,25 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
     output_path = Path(output_dir) if output_dir else input_path
     output_path.mkdir(parents=True, exist_ok=True)
 
-    pdf_files = sorted(input_path.glob("*.pdf"))
+    # 하위 폴더 포함 재귀 탐색
+    pdf_files = sorted(input_path.rglob("*.pdf"))
     if not pdf_files:
-        print(f"'{input_dir}' 폴더에 PDF 파일이 없습니다.")
+        print(f"'{input_dir}' 폴더(하위 포함)에 PDF 파일이 없습니다.")
         sys.exit(0)
 
-    print(f"총 {len(pdf_files)}개의 PDF 파일을 발견했습니다.")
+    print(f"총 {len(pdf_files)}개의 PDF 파일을 발견했습니다. (하위 폴더 포함)")
     print(f"출력 폴더: {output_path}\n")
 
     success_count = 0
     fail_count = 0
 
     for i, pdf_file in enumerate(pdf_files, 1):
-        print(f"[{i}/{len(pdf_files)}] 변환 중: {pdf_file.name}")
+        # 입력 폴더 기준 상대 경로를 유지하여 출력 폴더에 동일 구조 생성
+        rel_path = pdf_file.relative_to(input_path)
+        file_output_dir = output_path / rel_path.parent
+        file_output_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"[{i}/{len(pdf_files)}] 변환 중: {rel_path}")
         start_time = time.time()
 
         try:
@@ -47,7 +53,7 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
                     str(pdf_file),
                     page_chunks=True,
                     write_images=True,
-                    image_path=str(output_path),
+                    image_path=str(file_output_dir),
                 )
 
                 # 전체 마크다운 텍스트 합치기
@@ -55,7 +61,7 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
 
                 # 페이지별 청크 메타데이터를 JSON으로 저장
                 import json
-                json_filepath = output_path / (pdf_file.stem + "_chunks.json")
+                json_filepath = file_output_dir / (pdf_file.stem + "_chunks.json")
                 json_filepath.write_text(
                     json.dumps(chunks, ensure_ascii=False, indent=2),
                     encoding="utf-8",
@@ -65,11 +71,11 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
                 markdown_text = pymupdf4llm.to_markdown(
                     str(pdf_file),
                     write_images=True,
-                    image_path=str(output_path),
+                    image_path=str(file_output_dir),
                 )
 
             md_filename = pdf_file.stem + ".md"
-            md_filepath = output_path / md_filename
+            md_filepath = file_output_dir / md_filename
             md_filepath.write_text(markdown_text, encoding="utf-8")
 
             elapsed = time.time() - start_time
