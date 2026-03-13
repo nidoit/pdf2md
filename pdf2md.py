@@ -2,9 +2,33 @@
 """PDF 파일들을 pymupdf4llm을 이용하여 LLM용 마크다운으로 변환하는 프로그램."""
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
+
+
+def _find_tessdata():
+    """시스템에서 tessdata 디렉토리를 찾아 TESSDATA_PREFIX를 설정합니다."""
+    # 이미 올바르게 설정되어 있으면 스킵
+    prefix = os.environ.get("TESSDATA_PREFIX", "")
+    if prefix and Path(prefix).joinpath("eng.traineddata").exists():
+        return prefix
+
+    candidates = [
+        "/usr/share/tesseract-ocr/5/tessdata",
+        "/usr/share/tesseract-ocr/4/tessdata",
+        "/usr/share/tesseract-ocr/3/tessdata",
+        "/usr/share/tessdata",
+        "/opt/homebrew/share/tessdata",
+        "/usr/local/share/tessdata",
+    ]
+    for path in candidates:
+        if Path(path).joinpath("eng.traineddata").exists():
+            os.environ["TESSDATA_PREFIX"] = path
+            return path
+
+    return None
 
 
 def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: bool = False, use_ocr: bool = False):
@@ -16,14 +40,18 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
         page_chunks: True이면 페이지별 메타데이터를 포함한 JSON도 함께 저장
         use_ocr: True이면 Tesseract OCR 사용 (기본값: False)
     """
-    import pymupdf4llm
-
-    # OCR을 사용하지 않을 경우 layout 모드를 꺼서 Tesseract 호출 차단
-    if not use_ocr:
-        pymupdf4llm.use_layout(False)
-        print("모드: 텍스트 추출 (OCR 비활성)")
+    if use_ocr:
+        tessdata = _find_tessdata()
+        if tessdata:
+            print(f"모드: OCR 활성 (tessdata: {tessdata})")
+        else:
+            print("오류: Tesseract 언어 데이터(eng.traineddata)를 찾을 수 없습니다.")
+            print("  설치: sudo apt install tesseract-ocr tesseract-ocr-kor")
+            sys.exit(1)
     else:
-        print("모드: OCR 활성 (Tesseract 필요)")
+        print("모드: 텍스트 추출 (OCR 비활성)")
+
+    import pymupdf4llm
 
     input_path = Path(input_dir)
     if not input_path.is_dir():
@@ -56,8 +84,7 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
 
         try:
             md_kwargs = {
-                "write_images": True,
-                "image_path": str(file_output_dir),
+                "write_images": False,
             }
             if page_chunks:
                 md_kwargs["page_chunks"] = True
