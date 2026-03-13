@@ -2,21 +2,28 @@
 """PDF 파일들을 pymupdf4llm을 이용하여 LLM용 마크다운으로 변환하는 프로그램."""
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
 
 
-def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: bool = False):
+def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: bool = False, use_ocr: bool = False):
     """지정된 폴더의 모든 PDF 파일을 마크다운으로 변환합니다.
 
     Args:
         input_dir: PDF 파일이 있는 폴더 경로
         output_dir: 마크다운 파일을 저장할 폴더 경로 (미지정 시 input_dir 사용)
         page_chunks: True이면 페이지별 메타데이터를 포함한 JSON도 함께 저장
+        use_ocr: True이면 Tesseract OCR 사용 (기본값: False)
     """
     import pymupdf4llm
+
+    # OCR을 사용하지 않을 경우 layout 모드를 꺼서 Tesseract 호출 차단
+    if not use_ocr:
+        pymupdf4llm.use_layout(False)
+        print("모드: 텍스트 추출 (OCR 비활성)")
+    else:
+        print("모드: OCR 활성 (Tesseract 필요)")
 
     input_path = Path(input_dir)
     if not input_path.is_dir():
@@ -48,31 +55,29 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
         start_time = time.time()
 
         try:
+            md_kwargs = {
+                "write_images": True,
+                "image_path": str(file_output_dir),
+            }
             if page_chunks:
-                chunks = pymupdf4llm.to_markdown(
-                    str(pdf_file),
-                    page_chunks=True,
-                    write_images=True,
-                    image_path=str(file_output_dir),
-                )
+                md_kwargs["page_chunks"] = True
 
+            result = pymupdf4llm.to_markdown(str(pdf_file), **md_kwargs)
+
+            if page_chunks:
                 # 전체 마크다운 텍스트 합치기
-                markdown_text = "\n\n".join(chunk["text"] for chunk in chunks)
+                markdown_text = "\n\n".join(chunk["text"] for chunk in result)
 
                 # 페이지별 청크 메타데이터를 JSON으로 저장
                 import json
                 json_filepath = file_output_dir / (pdf_file.stem + "_chunks.json")
                 json_filepath.write_text(
-                    json.dumps(chunks, ensure_ascii=False, indent=2),
+                    json.dumps(result, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
                 print(f"  청크 메타데이터 -> {json_filepath}")
             else:
-                markdown_text = pymupdf4llm.to_markdown(
-                    str(pdf_file),
-                    write_images=True,
-                    image_path=str(file_output_dir),
-                )
+                markdown_text = result
 
             md_filename = pdf_file.stem + ".md"
             md_filepath = file_output_dir / md_filename
@@ -104,9 +109,14 @@ def main():
         action="store_true",
         help="페이지별 청크 메타데이터를 JSON으로 함께 저장",
     )
+    parser.add_argument(
+        "--ocr",
+        action="store_true",
+        help="Tesseract OCR 활성화 (스캔된 이미지 PDF용, Tesseract 설치 필요)",
+    )
     args = parser.parse_args()
 
-    convert_pdfs(args.input_dir, args.output_dir, page_chunks=args.chunks)
+    convert_pdfs(args.input_dir, args.output_dir, page_chunks=args.chunks, use_ocr=args.ocr)
 
 
 if __name__ == "__main__":
