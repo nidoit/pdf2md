@@ -34,5 +34,15 @@ elif ! "$VENV_DIR/bin/python" -c "import pymupdf4llm" 2>/dev/null; then
     echo ""
 fi
 
+# Tesseract OCR 데이터 경로 자동 탐색
+if [ -z "$TESSDATA_PREFIX" ]; then
+    for tessdir in /usr/share/tesseract-ocr/5/tessdata /usr/share/tesseract-ocr/4/tessdata /usr/share/tessdata /opt/homebrew/share/tessdata; do
+        if [ -d "$tessdir" ]; then
+            export TESSDATA_PREFIX="$tessdir"
+            break
+        fi
+    done
+fi
+
 # venv의 python으로 실행
 "$VENV_DIR/bin/python" "$SCRIPT_DIR/pdf2md.py" "$@"
