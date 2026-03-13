@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PDF 파일들을 marker-pdf를 이용하여 마크다운으로 변환하는 프로그램."""
+"""PDF 파일들을 pymupdf4llm을 이용하여 LLM용 마크다운으로 변환하는 프로그램."""
 
 import argparse
 import os
@@ -8,16 +8,15 @@ import time
 from pathlib import Path
 
 
-def convert_pdfs(input_dir: str, output_dir: str | None = None):
+def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: bool = False):
     """지정된 폴더의 모든 PDF 파일을 마크다운으로 변환합니다.
 
     Args:
         input_dir: PDF 파일이 있는 폴더 경로
         output_dir: 마크다운 파일을 저장할 폴더 경로 (미지정 시 input_dir 사용)
+        page_chunks: True이면 페이지별 메타데이터를 포함한 JSON도 함께 저장
     """
-    from marker.converters.pdf import PdfConverter
-    from marker.models import create_model_dict
-    from marker.output import text_from_rendered
+    import pymupdf4llm
 
     input_path = Path(input_dir)
     if not input_path.is_dir():
@@ -35,11 +34,6 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None):
     print(f"총 {len(pdf_files)}개의 PDF 파일을 발견했습니다.")
     print(f"출력 폴더: {output_path}\n")
 
-    # 모델을 한 번만 로드
-    print("모델 로딩 중...")
-    converter = PdfConverter(artifact_dict=create_model_dict())
-    print("모델 로딩 완료.\n")
-
     success_count = 0
     fail_count = 0
 
@@ -48,21 +42,34 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None):
         start_time = time.time()
 
         try:
-            rendered = converter(str(pdf_file))
-            markdown_text, _, images = text_from_rendered(rendered)
+            if page_chunks:
+                chunks = pymupdf4llm.to_markdown(
+                    str(pdf_file),
+                    page_chunks=True,
+                    write_images=True,
+                    image_path=str(output_path),
+                )
+
+                # 전체 마크다운 텍스트 합치기
+                markdown_text = "\n\n".join(chunk["text"] for chunk in chunks)
+
+                # 페이지별 청크 메타데이터를 JSON으로 저장
+                import json
+                json_filepath = output_path / (pdf_file.stem + "_chunks.json")
+                json_filepath.write_text(
+                    json.dumps(chunks, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                print(f"  청크 메타데이터 -> {json_filepath}")
+            else:
+                markdown_text = pymupdf4llm.to_markdown(
+                    str(pdf_file),
+                    write_images=True,
+                    image_path=str(output_path),
+                )
 
             md_filename = pdf_file.stem + ".md"
             md_filepath = output_path / md_filename
-
-            # 이미지 저장
-            if images:
-                img_dir = output_path / pdf_file.stem
-                img_dir.mkdir(parents=True, exist_ok=True)
-                for img_name, img_data in images.items():
-                    img_path = img_dir / img_name
-                    img_data.save(str(img_path))
-                print(f"  이미지 {len(images)}개 저장 -> {img_dir}/")
-
             md_filepath.write_text(markdown_text, encoding="utf-8")
 
             elapsed = time.time() - start_time
@@ -79,16 +86,21 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PDF 파일들을 marker-pdf를 이용하여 마크다운으로 변환합니다."
+        description="PDF 파일들을 pymupdf4llm을 이용하여 LLM용 마크다운으로 변환합니다."
     )
     parser.add_argument("input_dir", help="PDF 파일이 있는 폴더 경로")
     parser.add_argument(
         "-o", "--output-dir",
         help="마크다운 파일을 저장할 폴더 경로 (기본값: 입력 폴더와 동일)",
     )
+    parser.add_argument(
+        "--chunks",
+        action="store_true",
+        help="페이지별 청크 메타데이터를 JSON으로 함께 저장",
+    )
     args = parser.parse_args()
 
-    convert_pdfs(args.input_dir, args.output_dir)
+    convert_pdfs(args.input_dir, args.output_dir, page_chunks=args.chunks)
 
 
 if __name__ == "__main__":
