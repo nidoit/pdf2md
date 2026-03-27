@@ -85,6 +85,7 @@ def convert_pdfs(input_dir: str, output_dir: str | None = None, *, page_chunks: 
         try:
             md_kwargs = {
                 "write_images": False,
+                "use_ocr": use_ocr,
             }
             if page_chunks:
                 md_kwargs["page_chunks"] = True
